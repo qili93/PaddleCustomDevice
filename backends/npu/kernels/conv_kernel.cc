@@ -107,15 +107,31 @@ void Conv2dKernel(const Context& dev_ctx,
   }
 
   auto stream = dev_ctx.stream();
-  const auto& runner = NpuOpRunner("Conv2D",
-                                   {input_tensor, filter},
-                                   {output_tensor},
-                                   {{"strides", strides_vec},
-                                    {"pads", paddings},
-                                    {"dilations", dilations_vec},
-                                    {"groups", groups},
-                                    {"data_format", data_format}});
-  runner.Run(stream);
+
+  // prepare temp output of storage format
+  npu::FormatShape origin_shape = phi::vectorize<int64_t>(output->dims()); // [1, 8 ,5, 5]
+  npu::FormatShape storage_shape = npu::FormatHelper::GetStorageShape(ACL_FORMAT_NC1HWC0, origin_shape); // [1, 1, 5, 5, 16]
+  phi::DenseTensor output_storage;
+  output_storage.Resize(phi::make_ddim(storage_shape));
+  dev_ctx.template Alloc<T>(&output_storage);
+
+  NpuOpRunner runner_conv2d;
+  runner_conv2d.SetType("Conv2D")
+      .AddInput(input_tensor)
+      .AddInput(filter)
+      .AddOutput(output_storage, ACL_FORMAT_NCHW, origin_shape, ACL_FORMAT_NC1HWC0, storage_shape)
+      .AddAttrs({{"strides", strides_vec}})
+      .AddAttrs({{"pads", paddings}})
+      .AddAttrs({{"dilations", dilations_vec}})
+      .AddAttrs({{"groups", groups}})
+      .AddAttrs({{"data_format", data_format}})
+      .Run(stream);
+
+  NpuOpRunner runner_identity;
+  runner_identity.SetType("Identity")
+      .AddInput(output_storage, ACL_FORMAT_NCHW, origin_shape, ACL_FORMAT_NC1HWC0, storage_shape)
+      .AddOutput(output_tensor)
+      .Run(stream);
 }
 
 template <typename T, typename Context>

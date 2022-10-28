@@ -105,6 +105,32 @@ void BatchNormKernel(const Context& dev_ctx,
         {y_tesnor, *mean_out, *variance_out, *saved_mean, *saved_variance},
         {{"factor", momentum}, {"epsilon", epsilon}});
     runner_update.Run(stream);
+
+    // NpuOpRunner runner_reduce;
+    // runner_reduce.SetType("BNTrainingReduce")
+    //     .AddInput(x_tensor, ACL_FORMAT_NC1HWC0)
+    //     .AddOutput(sum, ACL_FORMAT_NC1HWC0)
+    //     .AddOutput(square_sum, ACL_FORMAT_NC1HWC0)
+    //     .AddAttrs({{"epsilon", epsilon}})
+    //     .Run(stream);
+
+    // NpuOpRunner runner_update;
+    // runner_update.SetType("BNTrainingUpdate")
+    //     .AddInput(x_tensor, ACL_FORMAT_NCHW)
+    //     .AddInput(sum, ACL_FORMAT_NCHW)
+    //     .AddInput(square_sum, ACL_FORMAT_NCHW)
+    //     .AddInput(scale, ACL_FORMAT_NCHW)
+    //     .AddInput(bias, ACL_FORMAT_NCHW)
+    //     .AddInput(running_mean, ACL_FORMAT_NCHW)
+    //     .AddInput(running_var, ACL_FORMAT_NCHW)
+    //     .AddOutput(y_tesnor, ACL_FORMAT_NCHW)
+    //     .AddOutput(*mean_out,ACL_FORMAT_NCHW)
+    //     .AddOutput(*variance_out, ACL_FORMAT_NCHW)
+    //     .AddOutput(*saved_mean, ACL_FORMAT_NCHW)
+    //     .AddOutput(*saved_variance, ACL_FORMAT_NCHW)
+    //     .AddAttrs({{"epsilon", static_cast<float>(epsilon)}})
+    //     .AddAttrs({{"factor", static_cast<float>(momentum)}})
+    //     .Run(stream);
   }
 }
 

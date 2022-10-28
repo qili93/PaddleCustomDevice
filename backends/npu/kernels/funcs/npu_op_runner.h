@@ -19,6 +19,7 @@
 #include "paddle/phi/extension.h"
 #include "paddle/utils/blank.h"
 #include "paddle/utils/variant.h"
+#include "kernels/funcs/format_utils.h"
 
 aclDataType ConvertToNpuDtype(paddle::experimental::DataType dtype);
 aclFormat ConvertToNpuFormat(phi::DataLayout layout);
@@ -53,6 +54,8 @@ class NpuOpRunner {
 
   ~NpuOpRunner();
 
+  std::string DebugString() const;
+
   const std::string &Type();
 
   NpuOpRunner &SetType(const std::string &name);
@@ -66,21 +69,20 @@ class NpuOpRunner {
 
   NpuOpRunner &AddInput(const phi::DenseTensor &tensor);
 
-  NpuOpRunner &AddInput(const phi::DenseTensor &tensor, aclMemType mem_type);
+  NpuOpRunner &AddInput(const phi::DenseTensor &tensor, const aclMemType mem_type);
 
-  NpuOpRunner &AddInput(const phi::CustomContext &dev_ctx,
-                        const std::vector<int32_t> &&dims);
+  NpuOpRunner &AddInput(const phi::DenseTensor &tensor, const aclFormat storage_format);
 
-  NpuOpRunner &AddInput(const phi::CustomContext &dev_ctx,
-                        const std::vector<int64_t> &&dims);
+  NpuOpRunner &AddInput(const phi::DenseTensor &tensor, const aclFormat origin_foramt, const npu::FormatShape origin_shape,
+                                                        const aclFormat storage_format, const npu::FormatShape storage_shape);
 
-  NpuOpRunner &AddInput(const phi::CustomContext &dev_ctx,
-                        const std::vector<float> &&values);
-
-  NpuOpRunner &AddInput(const phi::CustomContext &dev_ctx,
-                        const std::vector<double> &&values);
+  template <typename T>
+  NpuOpRunner &AddInput(const phi::CustomContext &dev_ctx, const std::vector<T> &&values);
 
   NpuOpRunner &AddOutput(const phi::DenseTensor &tensor);
+
+  NpuOpRunner &AddOutput(const phi::DenseTensor &tensor, const aclFormat origin_foramt, const npu::FormatShape origin_shape,
+                                                        const aclFormat storage_format, const npu::FormatShape storage_shape);
 
   NpuOpRunner &AddInputs(const std::vector<phi::DenseTensor> &tensors);
 

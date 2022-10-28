@@ -29,61 +29,14 @@ void FullKernel(const Context& dev_ctx,
   dev_ctx.template Alloc<T>(out);
 
   aclrtStream stream = static_cast<aclrtStream>(dev_ctx.stream());
-  T value = val.to<T>();
+  float value = val.to<float>();
 
-  if (dtype != phi::DenseTensorMeta::DataType::BOOL) {
-    phi::DenseTensor tensor_value;
-    tensor_value.Resize(phi::make_ddim({1}));
-    FillNpuTensorWithConstant<T>(&tensor_value, dev_ctx, value);
-    NpuOpRunner runner;
-    if (dtype != phi::DenseTensorMeta::DataType::INT64 &&
-        dtype != phi::DenseTensorMeta::DataType::FLOAT64) {
-#if (CANN_VERSION_CODE >= 503003 && CANN_VERSION_CODE < 504000)
-      runner.SetType("FillD")
-          .AddInput(tensor_value)
-          .AddOutput(*out)
-          .AddAttrs({{"dims", shape_vec}})
-          .Run(stream);
-#else
-      runner.SetType("Fill")
-          .AddInput(dev_ctx, std::vector<int64_t>(shape_vec))
-          .AddInput(tensor_value)
-          .AddOutput(*out)
-          .Run(stream);
-#endif
-    } else {
-      runner.SetType("Fill")
-          .AddInput(dev_ctx, std::vector<int64_t>(shape_vec))
-          .AddInput(tensor_value)
-          .AddOutput(*out)
-          .Run(stream);
-    }
-  } else {
-    auto op_func = [&shape_vec, &value](
-                       const std::vector<phi::DenseTensor>& inputs,
-                       const std::vector<phi::DenseTensor>& outputs,
-                       const NPUAttributeMap& attrs,
-                       const Context& dev_ctx) {
-      phi::DenseTensor tensor_value;
-      tensor_value.Resize(phi::make_ddim({1}));
-      FillNpuTensorWithConstant<uint8_t>(
-          &tensor_value, dev_ctx, static_cast<uint8_t>(value));
-
-      NpuOpRunner runner;
-      runner.SetType("Fill")
-          .AddInput(dev_ctx, std::vector<int64_t>(shape_vec))
-          .AddInput(tensor_value)
-          .AddOutput(outputs[0])
-          .Run(dev_ctx.stream());
-    };
-    NpuOpRunner::TypeAdapter({},
-                             {*out},
-                             {},
-                             dev_ctx,
-                             op_func,
-                             {},
-                             {phi::DenseTensorMeta::DataType::UINT8});
-  }
+  NpuOpRunner runner;
+  runner.SetType("Fills")
+      .AddInput(*out)
+      .AddOutput(*out)
+      .AddAttrs({{"value", value}})
+      .Run(stream);
 }
 
 template <typename T, typename Context>

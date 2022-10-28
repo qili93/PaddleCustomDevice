@@ -529,7 +529,7 @@ C_Status XcclRecv(void *recv_buf,
   return C_SUCCESS;
 }
 
-ENV_string(ascend_profiling_dir, "ascend_profiling");
+ENV_string(ascend_profiling_dir, "paddle_profile");
 ENV_uint64(ascend_profiling_data_type,
            ACL_PROF_ACL_API | ACL_PROF_TASK_TIME | ACL_PROF_AICORE_METRICS |
                ACL_PROF_AICPU | ACL_PROF_HCCL_TRACE | ACL_PROF_RUNTIME_API);
