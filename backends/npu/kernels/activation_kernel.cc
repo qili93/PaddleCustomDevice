@@ -185,6 +185,8 @@ template <typename T, typename Context>
 void ReluKernel(const Context& dev_ctx,
                 const phi::DenseTensor& x,
                 phi::DenseTensor* out) {
+
+                  
   dev_ctx.template Alloc<T>(out);
   const auto& runner = NpuOpRunner("Relu", {x}, {*out}, {});
 

@@ -23,6 +23,17 @@ void AddRawKernel(const Context& dev_ctx,
                   const phi::DenseTensor& y,
                   int axis,
                   phi::DenseTensor* out) {
+
+  // // auto storage_format_x = npu::OpPreparation::GetStorageFormat(x);
+  // // npu::OpPreparation::PrepareTensorWithFormat(*out, storage_format_x);
+
+  // LOG(INFO) << "111 - AddRawKernel - Output out: " << npu::OpPreparation::DebugString(*out);
+
+  // npu::OpPreparation::PrepareTensorWithTensor(x, *out);
+  // LOG(INFO) << "111 - AddRawKernel - Input x: " << npu::OpPreparation::DebugString(x);
+  // LOG(INFO) << "111 - AddRawKernel - Input y: " << npu::OpPreparation::DebugString(y);
+  // LOG(INFO) << "111 - AddRawKernel - Output out: " << npu::OpPreparation::DebugString(*out);
+
   dev_ctx.template Alloc<T>(out);
   auto stream = dev_ctx.stream();
 

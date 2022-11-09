@@ -50,6 +50,7 @@ template <typename T, typename Context>
 void Conv2dKernel(const Context& dev_ctx,
                   const phi::DenseTensor& input,
                   const phi::DenseTensor& filter,
+                  const phi::DenseTensor& bias,
                   const std::vector<int>& strides_t,
                   const std::vector<int>& paddings_t,
                   const std::string& padding_algorithm,
@@ -57,6 +58,9 @@ void Conv2dKernel(const Context& dev_ctx,
                   int groups,
                   const std::string& data_format,
                   phi::DenseTensor* output) {
+  npu::OpPreparation::PrepareTensorWithFormat(*output, ACL_FORMAT_NC1HWC0);
+  VLOG(1) << "000000 - Conv2dKernel - Output output: " << npu::OpPreparation::DebugString(*output);
+
   dev_ctx.template Alloc<T>(output);
   auto strides = strides_t;
   auto paddings = paddings_t;
@@ -84,7 +88,7 @@ void Conv2dKernel(const Context& dev_ctx,
   std::vector<int> strides_vec(4, 1);
   std::vector<int> dilations_vec(4, 1);
 
-  phi::DenseTensor input_tensor(input), output_tensor(*output);
+  phi::DenseTensor input_tensor(input), output_tensor(*output), filter_tensor(filter), bias_tensor(bias);
   if (channel_last) {
     phi::DenseTensorMeta input_meta = {
         input.dtype(), input.dims(), phi::DataLayout::kNHWC};
@@ -104,15 +108,56 @@ void Conv2dKernel(const Context& dev_ctx,
   }
 
   auto stream = dev_ctx.stream();
-  const auto& runner = NpuOpRunner("Conv2D",
-                                   {input_tensor, filter},
-                                   {output_tensor},
-                                   {{"strides", strides_vec},
-                                    {"pads", paddings},
-                                    {"dilations", dilations_vec},
-                                    {"groups", groups},
-                                    {"data_format", data_format}});
-  runner.Run(stream);
+
+  // prepare temp output of storage format
+  npu::OpPreparation::PrepareTensorWithFormat(input_tensor, ACL_FORMAT_NCHW);
+  npu::OpPreparation::PrepareTensorWithFormat(filter_tensor, ACL_FORMAT_NCHW);
+  npu::OpPreparation::PrepareTensorWithFormat(bias_tensor, ACL_FORMAT_NCHW);
+  npu::OpPreparation::PrepareTensorWithFormat(output_tensor, ACL_FORMAT_NC1HWC0);
+
+  // npu::FormatShape origin_shape = phi::vectorize<int64_t>(output->dims()); // [1, 8 ,5, 5]
+  // npu::FormatShape storage_shape = npu::FormatHelper::GetStorageShape(ACL_FORMAT_NC1HWC0, origin_shape); // [1, 1, 5, 5, 16]
+  // output_tensor.ResizeAndAllocate(phi::make_ddim(storage_shape));
+
+  // phi::DenseTensor output_storage;
+  // output_storage.Resize(phi::make_ddim(storage_shape));
+  // dev_ctx.template Alloc<T>(&output_storage);
+
+  VLOG(1) << "Conv2D - Input" << npu::OpPreparation::DebugString(input_tensor);
+  VLOG(1) << "Conv2D - Filter" << npu::OpPreparation::DebugString(filter_tensor);
+  VLOG(1) << "Conv2D - Bias" << npu::OpPreparation::DebugString(bias_tensor);
+  VLOG(1) << "Conv2D - OUtput" << npu::OpPreparation::DebugString(output_tensor);
+
+  // VLOG(1) << "Conv2D - Input"
+  //         << ": origin_format: " << input_tensor.get_origin_format() << ", storage_format: " << input_tensor.get_storage_format()
+  //         << ", origin_dims: " << input_tensor.get_origin_shape() << ", storage_dims: " << input_tensor.get_storage_shape();
+
+  // VLOG(1) << "Conv2D - Filter"
+  //         << ": origin_format: " << filter_tensor.get_origin_format() << ", storage_format: " << filter_tensor.get_storage_format()
+  //         << ", origin_dims: " << filter_tensor.get_origin_shape() << ", storage_dims: " << filter_tensor.get_storage_shape();
+
+  // VLOG(1) << "Conv2D - Output"
+  //         << ": origin_format: " << output_tensor.get_origin_format() << ", storage_format: " << output_tensor.get_storage_format()
+  //         << ", origin_dims: " << output_tensor.get_origin_shape() << ", storage_dims: " << output_tensor.get_storage_shape();
+
+  NpuOpRunner runner_conv2d;
+  runner_conv2d.SetType("Conv2D")
+      .AddInput(input_tensor)
+      .AddInput(filter_tensor)
+      .AddInput(bias_tensor)
+      .AddOutput(output_tensor)
+      .AddAttrs({{"strides", strides_vec}})
+      .AddAttrs({{"pads", paddings}})
+      .AddAttrs({{"dilations", dilations_vec}})
+      .AddAttrs({{"groups", groups}})
+      .AddAttrs({{"data_format", data_format}})
+      .Run(stream);
+
+  // NpuOpRunner runner_identity;
+  // runner_identity.SetType("Identity")
+  //     .AddInput(output_tensor)
+  //     .AddOutput(output_tensor)
+  //     .Run(stream);
 }
 
 template <typename T, typename Context>
