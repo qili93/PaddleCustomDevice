@@ -50,6 +50,7 @@ template <typename T, typename Context>
 void Conv2dKernel(const Context& dev_ctx,
                   const phi::DenseTensor& input,
                   const phi::DenseTensor& filter,
+                  const phi::DenseTensor& bias,
                   const std::vector<int>& strides_t,
                   const std::vector<int>& paddings_t,
                   const std::string& padding_algorithm,
@@ -57,7 +58,20 @@ void Conv2dKernel(const Context& dev_ctx,
                   int groups,
                   const std::string& data_format,
                   phi::DenseTensor* output) {
-  dev_ctx.template Alloc<T>(output);
+  VLOG(1)<< "--------------------------------------------------------------------------";
+  VLOG(1)<< "0 - Conv2dKernel - Input: input" << npu::OpPreparation::DebugString(input);
+  VLOG(1)<< "0 - Conv2dKernel - Input: filter" << npu::OpPreparation::DebugString(filter);
+  VLOG(1)<< "0 - Conv2dKernel - Input: bias" << npu::OpPreparation::DebugString(bias);
+  VLOG(1)<< "0 - Conv2dKernel - Output: output" << npu::OpPreparation::DebugString(*output);
+
+  auto requested_size = npu::OpPreparation::PrepareTensorWithFormat(*output, ACL_FORMAT_NC1HWC0);
+  dev_ctx.template Alloc<T>(output, requested_size * paddle::experimental::SizeOf(output->dtype()));
+
+  VLOG(1)<< "1 - Conv2dKernel - Input: input" << npu::OpPreparation::DebugString(input);
+  VLOG(1)<< "1 - Conv2dKernel - Input: filter" << npu::OpPreparation::DebugString(filter);
+  VLOG(1)<< "1 - Conv2dKernel - Input: bias" << npu::OpPreparation::DebugString(bias);
+  VLOG(1)<< "1 - Conv2dKernel - Output: output" << npu::OpPreparation::DebugString(*output);
+
   auto strides = strides_t;
   auto paddings = paddings_t;
   auto dilations = dilations_t;
@@ -84,7 +98,13 @@ void Conv2dKernel(const Context& dev_ctx,
   std::vector<int> strides_vec(4, 1);
   std::vector<int> dilations_vec(4, 1);
 
-  phi::DenseTensor input_tensor(input), output_tensor(*output);
+  phi::DenseTensor input_tensor(input), output_tensor(*output), filter_tensor(filter), bias_tensor(bias);
+
+  VLOG(1)<< "2 - Conv2dKernel - Input: input" << npu::OpPreparation::DebugString(input_tensor);
+  VLOG(1)<< "2 - Conv2dKernel - Input: filter" << npu::OpPreparation::DebugString(filter_tensor);
+  VLOG(1)<< "2 - Conv2dKernel - Input: bias" << npu::OpPreparation::DebugString(bias_tensor);
+  VLOG(1)<< "2 - Conv2dKernel - Output: output" << npu::OpPreparation::DebugString(output_tensor);
+
   if (channel_last) {
     phi::DenseTensorMeta input_meta = {
         input.dtype(), input.dims(), phi::DataLayout::kNHWC};
@@ -104,15 +124,25 @@ void Conv2dKernel(const Context& dev_ctx,
   }
 
   auto stream = dev_ctx.stream();
-  const auto& runner = NpuOpRunner("Conv2D",
-                                   {input_tensor, filter},
-                                   {output_tensor},
-                                   {{"strides", strides_vec},
-                                    {"pads", paddings},
-                                    {"dilations", dilations_vec},
-                                    {"groups", groups},
-                                    {"data_format", data_format}});
-  runner.Run(stream);
+
+  NpuOpRunner runner_conv2d;
+  runner_conv2d.SetType("Conv2D")
+      .AddInput(input_tensor)
+      .AddInput(filter_tensor)
+      .AddInput(bias_tensor)
+      .AddOutput(output_tensor)
+      .AddAttrs({{"strides", strides_vec}})
+      .AddAttrs({{"pads", paddings}})
+      .AddAttrs({{"dilations", dilations_vec}})
+      .AddAttrs({{"groups", groups}})
+      .AddAttrs({{"data_format", data_format}})
+      .Run(stream);
+
+  // NpuOpRunner runner_identity;
+  // runner_identity.SetType("Identity")
+  //     .AddInput(output_tensor)
+  //     .AddOutput(output_tensor)
+  //     .Run(stream);
 }
 
 template <typename T, typename Context>

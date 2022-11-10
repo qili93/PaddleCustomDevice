@@ -36,13 +36,32 @@ void BatchNormKernel(const Context& dev_ctx,
                      phi::DenseTensor* saved_mean,
                      phi::DenseTensor* saved_variance,
                      phi::DenseTensor* reserve_space) {
+
+  VLOG(1)<< "0 - BatchNormKernel - Input: x" << npu::OpPreparation::DebugString(x);
+  VLOG(1)<< "0 - BatchNormKernel - Input: running_mean" << npu::OpPreparation::DebugString(running_mean);
+  VLOG(1)<< "0 - BatchNormKernel - Input: running_var" << npu::OpPreparation::DebugString(running_var);
+  VLOG(1)<< "0 - BatchNormKernel - Input: scale" << npu::OpPreparation::DebugString(scale);
+  VLOG(1)<< "0 - BatchNormKernel - Input: bias" << npu::OpPreparation::DebugString(bias);
+  VLOG(1)<< "0 - BatchNormKernel - Output: y" << npu::OpPreparation::DebugString(*y);
+  VLOG(1)<< "0 - BatchNormKernel - Output: mean_out" << npu::OpPreparation::DebugString(*mean_out);
+  VLOG(1)<< "0 - BatchNormKernel - Output: variance_out" << npu::OpPreparation::DebugString(*variance_out);
+  VLOG(1)<< "0 - BatchNormKernel - Output: saved_mean" << npu::OpPreparation::DebugString(*saved_mean);
+  VLOG(1)<< "0 - BatchNormKernel - Output: saved_variance" << npu::OpPreparation::DebugString(*saved_variance);
+
+  VLOG(1)<< "--------------------------------------------------------------------------";
+
+  auto requested_size = npu::OpPreparation::PrepareTensorWithFormat(*y, ACL_FORMAT_NC1HWC0);
+  dev_ctx.template Alloc<T>(y, requested_size * paddle::experimental::SizeOf(y->dtype()));
+
+  VLOG(1)<< "1 - BatchNormKernel - Output: y" << npu::OpPreparation::DebugString(*y);
+
   bool test_mode = is_test && (!trainable_stats);
   bool training = !test_mode && !use_global_stats;
 
   phi::DataLayout data_layout = phi::StringToDataLayout(data_layout_str);
 
-  dev_ctx.template Alloc<T>(y);
-  phi::DenseTensor x_tensor(x), y_tensor(*y);
+  // dev_ctx.template Alloc<T>(y);
+  phi::DenseTensor x_tensor(x);
   const auto& x_dims = x.dims();
 
   PADDLE_ENFORCE_EQ(
@@ -72,41 +91,90 @@ void BatchNormKernel(const Context& dev_ctx,
     phi::DenseTensorMeta y_meta = {
         y->dtype(), y->dims(), phi::DataLayout::kNHWC};
     x_tensor.set_meta(x_meta);
-    y_tensor.set_meta(y_meta);
+    y->set_meta(y_meta);
   }
+
+  VLOG(1)<< "2 - BatchNormKernel - Input: x_tensor" << npu::OpPreparation::DebugString(x_tensor);
+  VLOG(1)<< "2 - BatchNormKernel - Output: y" << npu::OpPreparation::DebugString(*y);
 
   auto stream = dev_ctx.stream();
   if (!training) {
     const auto& runner_infer =
         NpuOpRunner("BNInfer",
                     {x_tensor, scale, bias, running_mean, running_var},
-                    {y_tensor},
+                    {*y},
                     {{"epsilon", epsilon}});
     runner_infer.Run(stream);
   } else {
-    dev_ctx.template Alloc<float>(mean_out);
-    dev_ctx.template Alloc<float>(variance_out);
-    dev_ctx.template Alloc<float>(saved_mean);
-    dev_ctx.template Alloc<float>(saved_variance);
+    // dev_ctx.template Alloc<float>(mean_out);
+    // dev_ctx.template Alloc<float>(variance_out);
+    // dev_ctx.template Alloc<float>(saved_mean);
+    // dev_ctx.template Alloc<float>(saved_variance);
 
+    dev_ctx.template Alloc<T>(mean_out, npu::OpPreparation::PrepareTensorWithFormat(*mean_out, ACL_FORMAT_NC1HWC0) * paddle::experimental::SizeOf(mean_out->dtype()));
+    dev_ctx.template Alloc<T>(variance_out, npu::OpPreparation::PrepareTensorWithFormat(*variance_out, ACL_FORMAT_NC1HWC0) * paddle::experimental::SizeOf(variance_out->dtype()));
+    dev_ctx.template Alloc<T>(saved_mean, npu::OpPreparation::PrepareTensorWithFormat(*saved_mean, ACL_FORMAT_NC1HWC0) * paddle::experimental::SizeOf(saved_mean->dtype()));
+    dev_ctx.template Alloc<T>(saved_variance, npu::OpPreparation::PrepareTensorWithFormat(*saved_variance, ACL_FORMAT_NC1HWC0) * paddle::experimental::SizeOf(saved_variance->dtype()));
+
+    VLOG(1)<< "3 - BatchNormKernel - Output: mean_out" << npu::OpPreparation::DebugString(*mean_out);
+    VLOG(1)<< "3 - BatchNormKernel - Output: variance_out" << npu::OpPreparation::DebugString(*variance_out);
+    VLOG(1)<< "3 - BatchNormKernel - Output: saved_mean" << npu::OpPreparation::DebugString(*saved_mean);
+    VLOG(1)<< "3 - BatchNormKernel - Output: saved_variance" << npu::OpPreparation::DebugString(*saved_variance);
+    VLOG(1)<< "--------------------------------------------------------------------------";
+
+    phi::DenseTensorMeta meta = {x.dtype(), mean_out->dims(), x.layout()};
     phi::DenseTensor sum, square_sum;
-    sum.Resize(running_mean.dims());
-    square_sum.Resize(running_mean.dims());
-    dev_ctx.template Alloc<float>(&sum);
-    dev_ctx.template Alloc<float>(&square_sum);
+    sum.set_meta(meta);
+    square_sum.set_meta(meta);
+    // dev_ctx.template Alloc<T>(&sum);
+    // dev_ctx.template Alloc<T>(&square_sum);
 
-    const auto& runner_reduce = NpuOpRunner("BNTrainingReduce",
-                                            {x_tensor},
-                                            {sum, square_sum},
-                                            {{"epsilon", epsilon}});
-    runner_reduce.Run(stream);
+    dev_ctx.template Alloc<T>(&sum, npu::OpPreparation::PrepareTensorWithFormat(sum, ACL_FORMAT_NC1HWC0) * paddle::experimental::SizeOf(sum.dtype()));
+    dev_ctx.template Alloc<T>(&square_sum, npu::OpPreparation::PrepareTensorWithFormat(square_sum, ACL_FORMAT_NC1HWC0) * paddle::experimental::SizeOf(square_sum.dtype()));
 
-    const auto& runner_update = NpuOpRunner(
-        "BNTrainingUpdate",
-        {x_tensor, sum, square_sum, scale, bias, running_mean, running_var},
-        {y_tensor, *mean_out, *variance_out, *saved_mean, *saved_variance},
-        {{"factor", momentum}, {"epsilon", epsilon}});
-    runner_update.Run(stream);
+
+    VLOG(1)<< "0 - BNTrainingReduce - Input: x_tensor" << npu::OpPreparation::DebugString(x_tensor);
+    VLOG(1)<< "0 - BNTrainingReduce - Output: sum" << npu::OpPreparation::DebugString(sum);
+    VLOG(1)<< "0 - BNTrainingReduce - Output: square_sum" << npu::OpPreparation::DebugString(square_sum);
+
+    NpuOpRunner runner_reduce;
+    runner_reduce.SetType("BNTrainingReduce")
+        .AddInput(x_tensor)
+        .AddOutput(sum)
+        .AddOutput(square_sum)
+        .AddAttrs({{"epsilon", epsilon}})
+        .Run(stream);
+
+    VLOG(1)<< "1 - BNTrainingReduce - Input: x_tensor" << npu::OpPreparation::DebugString(x_tensor);
+    VLOG(1)<< "1 - BNTrainingReduce - Output: sum" << npu::OpPreparation::DebugString(sum);
+    VLOG(1)<< "1 - BNTrainingReduce - Output: square_sum" << npu::OpPreparation::DebugString(square_sum);
+
+    VLOG(1)<< "--------------------------------------------------------------------------";
+
+    // phi::DenseTensor scale_tensor(scale), bias_tensor(bias), running_mean_tensor(running_mean), running_var_tensor(running_var);
+    VLOG(1)<< "0 - BNTrainingUpdate - Input: x" << npu::OpPreparation::DebugString(x_tensor);
+    VLOG(1)<< "0 - BNTrainingUpdate - Input: scale" << npu::OpPreparation::DebugString(scale);
+    VLOG(1)<< "0 - BNTrainingUpdate - Input: bias" << npu::OpPreparation::DebugString(bias);
+    VLOG(1)<< "0 - BNTrainingUpdate - Input: running_mean" << npu::OpPreparation::DebugString(running_mean);
+    VLOG(1)<< "0 - BNTrainingUpdate - Input: running_var" << npu::OpPreparation::DebugString(running_var);
+
+    NpuOpRunner runner_update;
+    runner_update.SetType("BNTrainingUpdate")
+        .AddInput(x_tensor)
+        .AddInput(sum)
+        .AddInput(square_sum)
+        .AddInput(scale)
+        .AddInput(bias)
+        .AddInput(running_mean)
+        .AddInput(running_var)
+        .AddOutput(*y)
+        .AddOutput(*mean_out)
+        .AddOutput(*variance_out)
+        .AddOutput(*saved_mean)
+        .AddOutput(*saved_variance)
+        .AddAttrs({{"epsilon", static_cast<float>(epsilon)}})
+        .AddAttrs({{"factor", static_cast<float>(momentum)}})
+        .Run(stream);
   }
 }
 
