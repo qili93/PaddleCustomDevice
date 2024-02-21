@@ -22,6 +22,7 @@ docker build --network=host -f Dockerfile.ubuntu18.$(uname -m).gcc82 \
   --build-arg https_proxy=${proxy} \
   --build-arg ftp_proxy=${proxy} \
   --build-arg no_proxy=bcebos.com \
+  --build-arg CACHEBUST=$(date +%s) \
   -t registry.baidubce.com/device/paddle-cpu:ubuntu18-$(uname -m)-gcc82 .
 docker push registry.baidubce.com/device/paddle-cpu:ubuntu18-$(uname -m)-gcc82
 
@@ -31,6 +32,7 @@ docker build --network=host -f Dockerfile.kylinv10.$(uname -m).gcc82 \
   --build-arg https_proxy=${proxy} \
   --build-arg ftp_proxy=${proxy} \
   --build-arg no_proxy=bcebos.com,baidu.com \
+  --build-arg CACHEBUST=$(date +%s) \
   -t registry.baidubce.com/device/paddle-cpu:kylinv10-$(uname -m)-gcc82 .
 docker push registry.baidubce.com/device/paddle-cpu:kylinv10-$(uname -m)-gcc82
 
@@ -41,6 +43,7 @@ if [ $(uname -i) == 'x86_64' ]; then
     --build-arg https_proxy=${proxy} \
     --build-arg ftp_proxy=${proxy} \
     --build-arg no_proxy=bcebos.com,baidu.com \
+  --build-arg CACHEBUST=$(date +%s) \
     -t registry.baidubce.com/device/paddle-cpu:kylinv10-$(uname -m)-gcc73 .
   docker push registry.baidubce.com/device/paddle-cpu:kylinv10-$(uname -m)-gcc73
 else
@@ -50,6 +53,7 @@ else
     --build-arg https_proxy=${proxy} \
     --build-arg ftp_proxy=${proxy} \
     --build-arg no_proxy=bcebos.com,baidu.com \
+  --build-arg CACHEBUST=$(date +%s) \
     -t registry.baidubce.com/device/paddle-cpu:euleros-$(uname -m)-gcc82 .
   docker push registry.baidubce.com/device/paddle-cpu:euleros-$(uname -m)-gcc82
 fi
